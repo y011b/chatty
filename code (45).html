@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ConverseSphere</title>
+    <!-- Poppins Font (FEATURE 14) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Firebase Libraries -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+    <style>
+        :root {
+            --font-family-main: 'Poppins', sans-serif;
+            
+            /* Light Theme (FEATURE 12) */
+            --bg-app: hsl(210, 30%, 96%); /* Very light gray, almost white */
+            --bg-sidebar: hsl(0, 0%, 100%);
+            --bg-chat-area: hsl(200, 20%, 92%); /* Slightly textured background for chat */
+            --bg-input-area: hsl(0, 0%, 100%);
+            --bg-message-sent: hsl(180, 50%, 88%); /* Light variant of accent */
+            --bg-message-received: hsl(0, 0%, 100%);
+            --text-primary: hsl(210, 25%, 25%);
+            --text-secondary: hsl(210, 20%, 45%);
+            --text-muted: hsl(210, 15%, 65%);
+            --border-color: hsl(210, 20%, 85%);
+            --shadow-soft: hsla(210, 20%, 0%, 0.1);
+            --shadow-medium: hsla(210, 20%, 0%, 0.15);
+            
+            /* FEATURE 13: Distinct Accent Color (Teal) */
+            --accent-primary: hsl(180, 60%, 40%); /* Main Teal */
+            --accent-primary-hover: hsl(180, 60%, 35%);
+            --accent-secondary: hsl(180, 40%, 65%); /* Lighter Teal for backgrounds/highlights */
+            --unread-indicator: var(--accent-primary);
+
+            --transition-fast: 0.15s ease-out;
+            --transition-medium: 0.25s ease-out;
+        }
+
+        /* Basic Reset */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { height: 100%; overflow: hidden; } /* Prevent page scroll */
+
+        body {
+            font-family: var(--font-family-main);
+            background-color: var(--bg-app);
+            color: var(--text-primary);
+            display: flex; /* For login screen centering */
+            justify-content: center;
+            align-items: center;
+            font-size: 15px; /* Base for Poppins */
+        }
+
+        /* --- LOGIN SCREEN (Simple for demo) --- */
+        .login-screen {
+            padding: 2.5rem;
+            background-color: var(--bg-sidebar);
+            border-radius: 12px;
+            box-shadow: 0 10px 30px var(--shadow-soft);
+            text-align: center;
+            width: 100%; max-width: 380px;
+        }
+        .login-screen h1 { margin-bottom: 0.5rem; color: var(--accent-primary); font-size: 2em; }
+        .login-screen p { margin-bottom: 1.5rem; color: var(--text-secondary); }
+        .login-screen button {
+            background-color: var(--accent-primary); color: white;
+            border: none; padding: 0.8rem 1.5rem; border-radius: 8px;
+            font-size: 1em; font-weight: 500; cursor: pointer;
+            transition: background-color var(--transition-fast); display:flex; align-items:center; justify-content:center; width:100%;
+        }
+        .login-screen button:hover { background-color: var(--accent-primary-hover); }
+        .login-screen button svg { width:20px; height:20px; margin-right:0.7rem; fill:white; }
+
+
+        /* --- MAIN APP STRUCTURE (FEATURE 15: Two-Pane Layout) --- */
+        .app-wrapper {
+            display: none; /* Hidden until user logs in */
+            width: 100%; height: 100%;
+            background-color: var(--bg-app);
+            grid-template-columns: 320px 1fr; /* Sidebar, Main Chat */
+            grid-template-rows: 60px 1fr; /* Header-like bar (part of sidebar/chat), Main content area */
+            grid-template-areas: 
+                "sidebar-header chat-header"
+                "sidebar-list chat-area";
+            animation: appFadeIn 0.5s ease-out;
+        }
+        @keyframes appFadeIn { from { opacity:0; transform:scale(0.98); } to { opacity:1; transform:scale(1); } }
+
+
+        /* --- SIDEBAR (Chat List / Contacts) --- */
+        .sidebar-header {
+            grid-area: sidebar-header;
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 1rem;
+            height: 60px;
+            background-color: var(--bg-sidebar);
+            border-bottom: 1px solid var(--border-color);
+            border-right: 1px solid var(--border-color);
+        }
+        .user-profile-summary { display:flex; align-items:center; gap:0.7rem;}
+        .user-avatar { width: 36px; height: 36px; border-radius: 50%; background-color: var(--accent-secondary); color: var(--accent-primary); display:grid; place-items:center; font-weight:600; font-size:1.1em;}
+        .user-profile-summary .username { font-weight: 600; font-size:1.05em; }
+        
+        .sidebar-actions button { /* Settings, New Chat */
+            background: none; border: none; color: var(--text-secondary); cursor: pointer;
+            font-size: 1.4rem; padding: 0.4rem; border-radius:50%;
+            transition: color var(--transition-fast), background-color var(--transition-fast);
+        }
+         .sidebar-actions button:hover { color: var(--accent-primary); background-color:var(--bg-app); }
+
+        .chat-list-panel {
+            grid-area: sidebar-list;
+            background-color: var(--bg-sidebar);
+            border-right: 1px solid var(--border-color);
+            overflow-y: auto;
+            padding-top: 0.5rem;
+        }
+        .search-bar-container { padding: 0.5rem 1rem; margin-bottom:0.5rem; }
+        #chat-search-input {
+            width: 100%; padding: 0.7rem 1rem; font-size:0.95em;
+            border-radius: 20px; border: 1px solid var(--border-color);
+            background-color: var(--bg-app); outline:none;
+        }
+         #chat-search-input:focus { border-color: var(--accent-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-primary) 20%, transparent);}
+        
+        .chat-list-item {
+            display: flex; align-items: center; padding: 0.8rem 1rem;
+            cursor: pointer; border-bottom: 1px solid var(--border-color);
+            transition: background-color var(--transition-fast);
+        }
+        .chat-list-item:hover { background-color: var(--bg-app); }
+        .chat-list-item.active { background-color: var(--accent-secondary); }
+        .chat-list-item .chat-avatar { width: 42px; height: 42px; /* Same as .user-avatar but diff size */ margin-right: 0.8rem; border-radius: 50%; background-color: var(--accent-secondary); color: var(--accent-primary); display:grid; place-items:center; font-weight:600; font-size:1.2em; flex-shrink:0;}
+        .chat-info { flex-grow: 1; overflow: hidden; }
+        .chat-name { font-weight: 600; display: block; }
+        .last-message { /* FEATURE 31 */
+            font-size: 0.85em; color: var(--text-secondary);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .chat-meta { text-align: right; font-size: 0.75em; color: var(--text-muted); flex-shrink:0; margin-left:0.5rem;}
+        .unread-badge {
+            background-color: var(--unread-indicator); color: white;
+            font-size: 0.7em; font-weight: 600;
+            padding: 0.15rem 0.4rem; border-radius: 10px;
+            margin-top: 0.2rem; display:inline-block;
+        }
+        .online-indicator { /* FEATURE 26 */
+            width:10px; height:10px; background-color:hsl(120, 60%, 50%); border-radius:50%;
+            border: 2px solid var(--bg-sidebar); margin-left:-15px; margin-top:25px;
+            position:relative; z-index:1;
+        }
+         .chat-list-item .online-indicator { margin-left:-18px; margin-top:28px;}
+
+
+        /* --- CHAT AREA (FEATURE 15 - Active Chat) --- */
+        .chat-area-header {
+            grid-area: chat-header;
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 1.5rem; height: 60px;
+            background-color: var(--bg-input-area); /* Matches input area bg */
+            border-bottom: 1px solid var(--border-color);
+        }
+        .chat-partner-info { display:flex; align-items:center; gap:0.8rem;}
+        .chat-partner-info .chat-avatar { /* Reuse from chat list item for consistency */}
+        .chat-partner-details .name { font-weight: 600; font-size: 1.1em;}
+        .chat-partner-details .status { font-size: 0.8em; color: var(--text-muted); }
+
+        .chat-area-main { /* FEATURE 17: Message Bubbles */
+            grid-area: chat-area;
+            background-color: var(--bg-chat-area);
+            /* Background image pattern subtle like WhatsApp:
+            background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23e0e0e0' fill-opacity='0.2' fill-rule='evenodd'%3E%3Cpath d='M0 40L40 0H20L0 20M40 40V20L20 40'/%3E%3C/g%3E%3C/svg%3E"); */
+            padding: 1.5rem;
+            overflow-y: auto;
+            display: flex; flex-direction: column;
+        }
+        .message-bubble {
+            max-width: 70%;
+            padding: 0.6rem 1rem;
+            border-radius: 12px;
+            margin-bottom: 0.8rem;
+            line-height: 1.5;
+            word-wrap: break-word;
+            font-size: 0.95em;
+            box-shadow: 0 1px 2px var(--shadow-soft);
+            animation: messageAppear 0.2s var(--transition-medium);
+        }
+        @keyframes messageAppear { from { opacity:0; transform: translateY(10px); } to { opacity:1; transform: translateY(0); }}
+
+        .message-bubble.sent {
+            background-color: var(--bg-message-sent);
+            align-self: flex-end;
+            border-bottom-right-radius: 4px; /* WhatsApp style pointed bubble */
+        }
+        .message-bubble.received {
+            background-color: var(--bg-message-received);
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+        }
+        .message-text {}
+        .message-meta {
+            font-size: 0.7em; text-align: right;
+            color: color-mix(in srgb, var(--text-secondary) 70%, transparent); /* More subtle */
+            margin-top: 0.3rem; display:flex; align-items:center; justify-content:flex-end;
+        }
+         .message-meta .read-receipt { margin-left:0.3rem; /* Double check for seen */ }
+         .message-meta .read-receipt.seen { color: var(--accent-primary); }
+
+        /* "Is Typing..." Indicator (FEATURE 7) */
+        .typing-indicator {
+            align-self: flex-start; margin-left:1rem; margin-bottom:0.5rem;
+            font-size:0.85em; color:var(--text-muted);
+            padding: 0.3rem 0.8rem; background: var(--bg-message-received);
+            border-radius: 10px; display:inline-block;
+        }
+        .typing-indicator span { animation: typingDots 1s infinite; display:inline-block; opacity:0;}
+        .typing-indicator span:nth-child(2) { animation-delay: 0.2s;}
+        .typing-indicator span:nth-child(3) { animation-delay: 0.4s;}
+        @keyframes typingDots { 0%, 20% { opacity:0;} 50% {opacity:1;} 100%{opacity:0;}}
+
+        .chat-input-area {
+            display: flex; align-items: center; padding: 0.8rem 1.5rem;
+            background-color: var(--bg-input-area);
+            border-top: 1px solid var(--border-color);
+        }
+        #message-input {
+            flex-grow: 1; padding: 0.8rem 1rem; font-size:0.95em;
+            border-radius: 20px; border: 1px solid var(--border-color);
+            background-color: var(--bg-app); resize:none; outline:none;
+            margin: 0 0.8rem;
+            max-height: 100px; /* Allow some expansion for multiline */
+            font-family: var(--font-family-main);
+        }
+        #message-input:focus { border-color:var(--accent-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-primary) 20%, transparent);}
+        .chat-input-area .icon-btn { /* For emoji, attach */
+             background:none; border:none; font-size:1.5rem; color:var(--text-secondary);
+             cursor:pointer; transition: color var(--transition-fast);
+        }
+        .chat-input-area .icon-btn:hover { color: var(--accent-primary); }
+        #send-message-btn {
+            background-color: var(--accent-primary); color: white;
+            border:none; border-radius:50%; width:44px; height:44px;
+            display:flex; align-items:center; justify-content:center;
+            font-size:1.4rem; cursor:pointer;
+            transition: background-color var(--transition-fast);
+        }
+        #send-message-btn:hover { background-color: var(--accent-primary-hover); }
+        
+        .empty-chat-placeholder {
+            flex-grow:1; display:flex; flex-direction:column; justify-content:center; align-items:center;
+            text-align:center; color: var(--text-muted);
+        }
+        .empty-chat-placeholder svg { width:80px; height:80px; margin-bottom:1rem; opacity:0.5;}
+        .empty-chat-placeholder h3 { font-size:1.3em; color:var(--text-secondary); margin-bottom:0.3rem;}
+
+
+        /* FEATURE 28: Settings Panel (Modal) */
+        .settings-modal-overlay {
+            position: fixed; top:0; left:0; width:100%; height:100%;
+            background: rgba(0,0,0,0.4); backdrop-filter:blur(3px);
+            z-index:1000; display:none; place-items:center;
+            opacity:0; transition:opacity var(--transition-medium);
+        }
+        .settings-modal-overlay.visible { display:grid; opacity:1;}
+        .settings-modal-content {
+            background:var(--bg-sidebar); padding:2rem; border-radius:12px;
+            width:90%; max-width:400px; box-shadow:0 5px 20px var(--shadow-medium);
+            transform:scale(0.95); opacity:0;
+            transition: transform var(--transition-medium) cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity var(--transition-medium);
+        }
+        .settings-modal-overlay.visible .settings-modal-content { transform:scale(1); opacity:1;}
+        .settings-modal-content h2 {text-align:center; margin-bottom:1.5rem; color: var(--accent-primary); }
+        .settings-modal-content button.logout-btn {
+            background-color: hsl(0, 70%, 55%); color: white; border:none;
+            padding:0.7rem 1.5rem; border-radius:8px; display:block; width:100%;
+            font-size:1em; font-weight:500; margin-top:1rem; cursor:pointer;
+        }
+
+        /* --- RESPONSIVE DESIGN (FEATURE 21) --- */
+        @media (max-width: 768px) {
+            body { font-size: 14px; } /* Slightly smaller base for mobile */
+            .app-wrapper {
+                grid-template-columns: 1fr; /* Stack sidebar and chat */
+                grid-template-rows: 60px 1fr; /* Header for active view, content */
+                grid-template-areas: "active-header" "active-content";
+            }
+            .sidebar-header, .chat-list-panel, .chat-area-header { /* Parts that become main header */
+                 grid-area: active-header;
+            }
+             .chat-list-panel, .chat-area-main, .chat-input-area { /* Parts that become main content */
+                grid-area: active-content;
+            }
+            .sidebar-header, .chat-list-panel {
+                border-right: none;
+                /* JS will toggle visibility of these */
+            }
+            /* Back button for mobile navigation */
+            .back-to-chats-btn {
+                 background:none; border:none; font-size:1.5rem; color:var(--accent-primary);
+                 cursor:pointer; margin-right:0.8rem; display:none; /* Shown by JS on mobile */
+            }
+            /* JS will handle showing/hiding list vs chat view */
+            .chat-list-view { display: flex; flex-direction: column; height:100%;}
+            .chat-view { display: none; flex-direction:column; height:100%; } /* Hidden initially on mobile unless a chat is active */
+            
+            .message-bubble { max-width: 80%; }
+            .chat-input-area { padding: 0.6rem 1rem;}
+            #message-input { margin: 0 0.6rem; }
+            
+             /* When a chat is active on mobile */
+            .app-wrapper.chat-active .chat-list-view { display:none; }
+            .app-wrapper.chat-active .chat-view { display:flex; }
+            .app-wrapper.chat-active .back-to-chats-btn { display:inline-flex; }
+        }
+        
+        /* Custom scrollbars */
+        ::-webkit-scrollbar { width: 6px; height: 6px;}
+        ::-webkit-scrollbar-track { background: var(--bg-app); }
+        ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+    </style>
+</head>
+<body>
+
+    <!-- Login Screen -->
+    <div class="login-screen" id="login-screen">
+        <h1>ConverseSphere</h1>
+        <p>Connect and chat in real-time.</p>
+        <button id="google-login-btn">
+             <svg viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path><path fill="none" d="M0 0h48v48H0z"></path></svg>
+            Sign in with Google
+        </button>
+        <!-- Add email/password fields & button if you enable that in Firebase -->
+    </div>
+
+    <!-- Main App Wrapper -->
+    <div class="app-wrapper" id="app-wrapper">
+        <!-- Structure that JS will manage for mobile views -->
+        <div class="chat-list-view" id="chat-list-view">
+            <header class="sidebar-header">
+                <div class="user-profile-summary">
+                    <div class="user-avatar" id="user-avatar-sidebar">U</div>
+                    <span class="username" id="username-sidebar">User</span>
+                </div>
+                <div class="sidebar-actions">
+                    <button id="settings-btn" title="Settings">⚙️</button>
+                    <!-- <button id="new-chat-btn" title="New Chat">➕</button> -->
+                </div>
+            </header>
+            <div class="chat-list-panel">
+                <div class="search-bar-container">
+                    <input type="text" id="chat-search-input" placeholder="Search chats or users...">
+                </div>
+                <div id="chat-list-items">
+                    <!-- Chat list items will be populated by JS -->
+                    <p style="text-align:center; padding:1rem; color:var(--text-muted)">Loading chats...</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="chat-view" id="chat-view">
+            <header class="chat-area-header">
+                <!-- Mobile back button (FEATURE 15 Mobile Nav) -->
+                 <button class="back-to-chats-btn" id="back-to-chats-btn" title="Back to Chats">
+                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                 </button>
+                <div class="chat-partner-info" id="chat-partner-info">
+                    <!-- Default state / Populated by JS -->
+                    <div class="chat-avatar"></div>
+                    <div class="chat-partner-details">
+                        <span class="name">Select a Chat</span>
+                        <span class="status"></span>
+                    </div>
+                </div>
+                <!-- More chat actions (e.g., call, info) could go here -->
+                <button id="chat-options-btn" class="sidebar-actions" title="Chat Options" style="visibility:hidden;">⋮</button>
+            </header>
+
+            <main class="chat-area-main" id="chat-messages-area">
+                 <!-- Placeholder when no chat is selected -->
+                 <div class="empty-chat-placeholder" id="empty-chat-placeholder">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2.03 11.97L15 12l2.03-1.97L18.06 9l-3.03 3.03L18.06 15l-1.03-1.03zm-4.94 0L10.03 12l2.03-1.97L13.12 9l-3.03 3.03L13.12 15l-1.03-1.03z"/></svg> <!-- Message Icon -->
+                    <h3>ConverseSphere</h3>
+                    <p>Select a conversation or start a new one.</p>
+                </div>
+                <!-- Messages will be populated by JS -->
+            </main>
+
+            <footer class="chat-input-area">
+                <button class="icon-btn" id="emoji-btn" title="Emoji">😀</button>
+                <!-- <button class="icon-btn" id="attach-btn" title="Attach File">📎</button> -->
+                <textarea id="message-input" placeholder="Type a message..." rows="1"></textarea>
+                <button class="icon-btn" id="send-message-btn" title="Send">
+                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                </button>
+            </footer>
+        </div>
+    </div>
+    
+    <!-- Settings Modal -->
+    <div class="settings-modal-overlay" id="settings-modal">
+        <div class="settings-modal-content">
+            <h2>Settings</h2>
+            <div id="user-profile-settings" style="text-align:center; margin-bottom:1.5rem;">
+                <div class="user-avatar" id="settings-avatar" style="width:80px; height:80px; font-size:2.5em; margin:0 auto 0.5rem;">U</div>
+                <h3 id="settings-username" style="font-size:1.3em;">Username</h3>
+                <p id="settings-user-email" style="font-size:0.9em; color:var(--text-muted);"></p>
+            </div>
+            <button class="logout-btn" id="logout-btn">Log Out</button>
+            <p style="text-align:center; font-size:0.8em; color:var(--text-muted); margin-top:1.5rem; cursor:pointer;" id="close-settings-modal">Close</p>
+        </div>
+    </div>
+
+    <script>
+        // --- Firebase Configuration ---
+        // IMPORTANT: REPLACE with your actual Firebase config object
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            databaseURL: "YOUR_DATABASE_URL", // If using Realtime Database
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.database(); // Using Realtime Database
+
+        // --- DOM Elements ---
+        const loginScreen = document.getElementById('login-screen');
+        const appWrapper = document.getElementById('app-wrapper');
+        const googleLoginBtn = document.getElementById('google-login-btn');
+
+        const userAvatarSidebar = document.getElementById('user-avatar-sidebar');
+        const usernameSidebar = document.getElementById('username-sidebar');
+        const settingsBtn = document.getElementById('settings-btn');
+        const chatListItems = document.getElementById('chat-list-items');
+        const chatSearchInput = document.getElementById('chat-search-input');
+        
+        const chatListView = document.getElementById('chat-list-view');
+        const chatView = document.getElementById('chat-view');
+        const backToChatsBtn = document.getElementById('back-to-chats-btn');
+
+        const chatPartnerInfo = document.getElementById('chat-partner-info');
+        const chatMessagesArea = document.getElementById('chat-messages-area');
+        const messageInput = document.getElementById('message-input');
+        const sendMessageBtn = document.getElementById('send-message-btn');
+        const emptyChatPlaceholder = document.getElementById('empty-chat-placeholder');
+
+        const settingsModal = document.getElementById('settings-modal');
+        const settingsAvatar = document.getElementById('settings-avatar');
+        const settingsUsername = document.getElementById('settings-username');
+        const settingsUserEmail = document.getElementById('settings-user-email');
+        const logoutBtn = document.getElementById('logout-btn');
+        const closeSettingsModalBtn = document.getElementById('close-settings-modal');
+
+        let currentUser = null;
+        let currentChatId = null;
+        let chatListeners = {}; // To store Firebase listeners and detach them
+        let usersCache = {}; // Cache user data to avoid frequent DB lookups
+
+        // --- Authentication (FEATURE 2) ---
+        googleLoginBtn.addEventListener('click', () => {
+            const provider = new firebase.auth.GoogleAuthProvider();
+            auth.signInWithPopup(provider)
+                .catch(error => console.error("Google Sign-In Error:", error.message));
+        });
+
+        logoutBtn.addEventListener('click', () => {
+            auth.signOut().then(() => {
+                closeModal(settingsModal);
+                // Detach all Firebase listeners might be needed here
+                Object.values(chatListeners).forEach(off => off());
+                chatListeners = {};
+                currentUser = null;
+                currentChatId = null;
+            }).catch(error => console.error("Logout Error:", error));
+        });
+
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                currentUser = user;
+                loginScreen.style.display = 'none';
+                appWrapper.style.display = 'grid'; // Use grid for main layout
+                initAppForUser();
+            } else {
+                currentUser = null;
+                loginScreen.style.display = 'flex';
+                appWrapper.style.display = 'none';
+                 clearChatUI();
+            }
+        });
+
+        function initAppForUser() {
+            // Display user info in sidebar and settings
+            userAvatarSidebar.textContent = currentUser.displayName ? currentUser.displayName[0].toUpperCase() : 'U';
+            usernameSidebar.textContent = currentUser.displayName || 'User';
+            if(currentUser.photoURL) userAvatarSidebar.innerHTML = `<img src="${currentUser.photoURL}" alt="avatar" style="width:100%;height:100%;border-radius:50%;">`;
+
+            settingsAvatar.textContent = currentUser.displayName ? currentUser.displayName[0].toUpperCase() : 'U';
+            settingsUsername.textContent = currentUser.displayName || 'Anonymous';
+            settingsUserEmail.textContent = currentUser.email;
+             if(currentUser.photoURL) settingsAvatar.innerHTML = `<img src="${currentUser.photoURL}" alt="avatar" style="width:100%;height:100%;border-radius:50%;">`;
+
+
+            // Save/update user info in Firebase
+            db.ref('users/' + currentUser.uid).set({
+                displayName: currentUser.displayName,
+                email: currentUser.email,
+                photoURL: currentUser.photoURL || null,
+                lastSeen: firebase.database.ServerValue.TIMESTAMP, // For online status
+                online: true
+            });
+            // Set online false on disconnect (Firebase handles this server-side)
+            const userStatusRef = db.ref('users/' + currentUser.uid + '/online');
+            const lastSeenRef = db.ref('users/' + currentUser.uid + '/lastSeen');
+            firebase.database().ref('.info/connected').on('value', snapshot => {
+                if(snapshot.val() === false) return; // Not yet connected or disconnected by Firebase
+                userStatusRef.onDisconnect().set(false).then(() => {
+                    userStatusRef.set(true); // Set to true when connection established
+                    lastSeenRef.onDisconnect().set(firebase.database.ServerValue.TIMESTAMP);
+                });
+            });
+
+            loadUserChats();
+            showChatListView(); // Default to chat list on mobile
+        }
+        
+        function clearChatUI() {
+            chatListItems.innerHTML = '<p style="text-align:center; padding:1rem; color:var(--text-muted)">Loading chats...</p>';
+            chatMessagesArea.innerHTML = ''; // Clear messages
+            chatMessagesArea.appendChild(emptyChatPlaceholder); // Show placeholder
+            const chatPartnerNameEl = chatPartnerInfo.querySelector('.name');
+            const chatPartnerStatusEl = chatPartnerInfo.querySelector('.status');
+            const chatPartnerAvatarEl = chatPartnerInfo.querySelector('.chat-avatar');
+            if (chatPartnerNameEl) chatPartnerNameEl.textContent = 'Select a Chat';
+            if (chatPartnerStatusEl) chatPartnerStatusEl.textContent = '';
+            if (chatPartnerAvatarEl) chatPartnerAvatarEl.innerHTML = '';
+        }
+
+        // --- Chat List & Users (FEATURE 4) ---
+        function loadUserChats() {
+            const userChatsRef = db.ref(`userChats/${currentUser.uid}`);
+            userChatsRef.on('value', snapshot => {
+                chatListItems.innerHTML = ''; // Clear previous
+                if (!snapshot.exists() || snapshot.numChildren() === 0) {
+                     chatListItems.innerHTML = `<p style="text-align:center; padding:1rem; color:var(--text-muted);">No chats yet. Start a new one!</p>`;
+                     // Here you could show a list of all users to start a new chat (complex search/discovery)
+                    displayAllUsersFallback(); // Display some users to start chats
+                    return;
+                }
+                const chatPromises = [];
+                snapshot.forEach(childSnapshot => {
+                    const chatId = childSnapshot.key;
+                    const chatData = childSnapshot.val(); // Contains lastMessage, timestamp, partnerId (or group name)
+                    
+                    const promise = getChatPartnerData(chatData.partnerId).then(partner => {
+                         if (!partner) return null; // Skip if partner data not found
+                         return createChatListItem(chatId, chatData, partner);
+                    });
+                    chatPromises.push(promise);
+                });
+
+                Promise.all(chatPromises).then(listItems => {
+                     listItems.filter(item => item !== null) // Filter out nulls from missing partners
+                               .sort((a,b) => b.dataset.timestamp - a.dataset.timestamp) // Sort by last message timestamp
+                               .forEach(item => chatListItems.appendChild(item));
+                });
+            });
+        }
+        
+        async function getChatPartnerData(partnerId) {
+            if (usersCache[partnerId]) return usersCache[partnerId];
+            try {
+                const snapshot = await db.ref(`users/${partnerId}`).once('value');
+                if (snapshot.exists()) {
+                    usersCache[partnerId] = { id: partnerId, ...snapshot.val() };
+                    return usersCache[partnerId];
+                }
+                return null;
+            } catch (error) {
+                console.error("Error fetching user data:", error);
+                return null;
+            }
+        }
+
+        // Fallback for new users to see someone to chat with
+        function displayAllUsersFallback() {
+             db.ref('users').limitToFirst(10).once('value', snapshot => {
+                 if (!snapshot.exists()) return;
+                 const header = document.createElement('p');
+                 header.textContent = "Start a chat with:";
+                 header.style.cssText="padding:0.5rem 1rem; color:var(--text-muted); font-weight:500;";
+                 chatListItems.appendChild(header);
+
+                 snapshot.forEach(childSnapshot => {
+                     const userData = childSnapshot.val();
+                     const userId = childSnapshot.key;
+                     if (userId === currentUser.uid) return; // Don't list self
+
+                     const mockChatData = {
+                         partnerId: userId,
+                         lastMessage: "Tap to start a conversation",
+                         timestamp: Date.now() 
+                     };
+                     const listItem = createChatListItem(null, mockChatData, { id: userId, ...userData }, true); // Pass true for new chat
+                     chatListItems.appendChild(listItem);
+                 });
+             });
+        }
+
+
+        function createChatListItem(chatId, chatData, partnerData, isNewChatPlaceholder = false) {
+            const item = document.createElement('div');
+            item.classList.add('chat-list-item');
+            if (chatId === currentChatId) item.classList.add('active');
+            item.dataset.chatId = chatId; // Will be null for new chat placeholders
+            item.dataset.partnerId = partnerData.id;
+            item.dataset.timestamp = chatData.timestamp || 0;
+
+            const avatarDiv = document.createElement('div');
+            avatarDiv.classList.add('chat-avatar');
+             if(partnerData.photoURL){
+                 avatarDiv.innerHTML = `<img src="${partnerData.photoURL}" alt="${partnerData.displayName[0]}" style="width:100%;height:100%;border-radius:50%;">`;
+             } else {
+                 avatarDiv.textContent = partnerData.displayName ? partnerData.displayName[0].toUpperCase() : 'U';
+             }
+            
+            const onlineIndicator = document.createElement('div'); // FEATURE 26
+            onlineIndicator.classList.add('online-indicator');
+            onlineIndicator.style.display = partnerData.online ? 'block' : 'none'; // Initially hide/show based on fetched status
+            // JS needs to update this via a listener on users/{partnerId}/online
+            if (chatListeners[`online_${partnerData.id}`]) chatListeners[`online_${partnerData.id}`](); // Detach previous
+            const partnerOnlineRef = db.ref(`users/${partnerData.id}/online`);
+            const onlineListener = partnerOnlineRef.on('value', snap => {
+                onlineIndicator.style.display = snap.val() ? 'block' : 'none';
+            });
+            chatListeners[`online_${partnerData.id}`] = () => partnerOnlineRef.off('value', onlineListener); // Store for detachment
+
+
+            const chatInfo = document.createElement('div');
+            chatInfo.classList.add('chat-info');
+            chatInfo.innerHTML = `
+                <span class="chat-name">${partnerData.displayName || 'Unknown User'}</span>
+                <span class="last-message">${chatData.lastMessage || 'No messages yet'}</span>
+            `;
+            
+            const chatMeta = document.createElement('div');
+            chatMeta.classList.add('chat-meta');
+            // Format timestamp, add unread badge if logic exists
+            const time = chatData.timestamp ? new Date(chatData.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
+            chatMeta.innerHTML = `<span class="last-message-time">${time}</span>`;
+            // Add unread badge logic here later if `chatData.unreadCount > 0`
+
+            item.appendChild(avatarDiv);
+            item.appendChild(onlineIndicator); // Added after avatar for positioning trick
+            item.appendChild(chatInfo);
+            item.appendChild(chatMeta);
+            
+            item.addEventListener('click', async () => {
+                if(item.dataset.chatId && item.dataset.chatId !== "null"){
+                    openChat(item.dataset.chatId, partnerData);
+                } else { // It's a placeholder for starting a new chat
+                    const newChatId = await createNewChatWithUser(partnerData.id);
+                    if (newChatId) openChat(newChatId, partnerData);
+                }
+            });
+            return item;
+        }
+
+        async function createNewChatWithUser(partnerId) {
+            // Check if chat already exists to prevent duplicates (more complex logic for this)
+            // For simplicity: generate a combined ID (sorted to be consistent)
+            const members = {};
+            members[currentUser.uid] = true;
+            members[partnerId] = true;
+            
+            // Try to create a consistent chat ID
+            const ids = [currentUser.uid, partnerId].sort();
+            const potentialChatId = ids.join('_'); // e.g., uid1_uid2
+
+            const newChatRef = db.ref(`chats/${potentialChatId}`);
+            try {
+                 await newChatRef.set({
+                    members: members,
+                    createdAt: firebase.database.ServerValue.TIMESTAMP
+                });
+                // Add chat to both users' chat lists
+                const timestamp = Date.now(); // Client-side timestamp for initial list item
+                 db.ref(`userChats/${currentUser.uid}/${potentialChatId}`).set({ partnerId: partnerId, lastMessage: "Chat started", timestamp: timestamp });
+                 db.ref(`userChats/${partnerId}/${potentialChatId}`).set({ partnerId: currentUser.uid, lastMessage: "Chat started", timestamp: timestamp });
+                return potentialChatId;
+            } catch (error) {
+                console.error("Error creating new chat:", error);
+                return null;
+            }
+        }
+
+
+        // --- Real-time Messaging (FEATURE 3, 6, 7, 8) ---
+        function openChat(chatId, partnerData) {
+            currentChatId = chatId;
+            // Update UI
+            document.querySelectorAll('.chat-list-item.active').forEach(el => el.classList.remove('active'));
+            const activeListItem = chatListItems.querySelector(`.chat-list-item[data-chat-id="${chatId}"]`);
+            if(activeListItem) activeListItem.classList.add('active');
+
+            const chatPartnerNameEl = chatPartnerInfo.querySelector('.name');
+            const chatPartnerStatusEl = chatPartnerInfo.querySelector('.status');
+            const chatPartnerAvatarEl = chatPartnerInfo.querySelector('.chat-avatar');
+            
+            chatPartnerNameEl.textContent = partnerData.displayName || 'Unknown';
+            chatPartnerAvatarEl.textContent = partnerData.displayName ? partnerData.displayName[0].toUpperCase() : '?';
+            if(partnerData.photoURL) chatPartnerAvatarEl.innerHTML = `<img src="${partnerData.photoURL}" alt="avatar" style="width:100%;height:100%;border-radius:50%;">`;
+            // Listen for partner's online status to update chat header
+            const partnerStatusRef = db.ref(`users/${partnerData.id}/online`);
+            if (chatListeners[`partnerStatus_${partnerData.id}`]) chatListeners[`partnerStatus_${partnerData.id}`]();
+            const partnerStatusListener = partnerStatusRef.on('value', snap => {
+                chatPartnerStatusEl.textContent = snap.val() ? 'Online' : 'Offline';
+                 chatPartnerStatusEl.style.color = snap.val() ? 'hsl(120, 50%, 45%)' : 'var(--text-muted)';
+            });
+             chatListeners[`partnerStatus_${partnerData.id}`] = () => partnerStatusRef.off('value', partnerStatusListener);
+            document.getElementById('chat-options-btn').style.visibility = 'visible';
+
+
+            chatMessagesArea.innerHTML = ''; // Clear previous messages
+            emptyChatPlaceholder.style.display = 'none';
+
+            // Detach previous chat's message listener if any
+            if (chatListeners[currentChatId]) chatListeners[currentChatId]();
+            
+            const messagesRef = db.ref(`chats/${chatId}/messages`).orderByChild('timestamp').limitToLast(50);
+            const messagesListener = messagesRef.on('child_added', snapshot => {
+                const messageData = snapshot.val();
+                displayMessage(messageData);
+            });
+            chatListeners[currentChatId] = () => messagesRef.off('child_added', messagesListener); // Store for detachment
+
+            showChatView();
+        }
+        
+        function displayMessage(messageData) {
+            const bubble = document.createElement('div');
+            bubble.classList.add('message-bubble');
+            bubble.classList.add(messageData.senderId === currentUser.uid ? 'sent' : 'received');
+
+            const textP = document.createElement('p');
+            textP.classList.add('message-text');
+            textP.textContent = messageData.text; // Basic text, sanitize for security in real app
+            
+            const metaDiv = document.createElement('div');
+            metaDiv.classList.add('message-meta');
+            const time = new Date(messageData.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            metaDiv.innerHTML = `<span class="timestamp">${time}</span>`;
+            // Add read receipt icon if sender is current user
+            if(messageData.senderId === currentUser.uid){
+                const receiptSpan = document.createElement('span');
+                receiptSpan.classList.add('read-receipt');
+                receiptSpan.innerHTML = messageData.seen ? '✔✔' : '✔'; // Single for sent, double for seen
+                if(messageData.seen) receiptSpan.classList.add('seen');
+                metaDiv.appendChild(receiptSpan);
+                // Listen for 'seen' updates on this message - complex, requires per-message listener
+            }
+
+            bubble.appendChild(textP);
+            bubble.appendChild(metaDiv);
+            chatMessagesArea.appendChild(bubble);
+            scrollToBottom();
+            
+            // Mark as seen if received and current user is viewing this chat
+            if(messageData.senderId !== currentUser.uid && !messageData.seenBy?.[currentUser.uid] && currentChatId === messageData.chatId){
+                db.ref(`chats/${messageData.chatId}/messages/${messageData.id}/seenBy/${currentUser.uid}`).set(true);
+                db.ref(`chats/${messageData.chatId}/messages/${messageData.id}/seen`).set(true); // Simplified seen for now
+            }
+        }
+        
+        // Typing indicator handling (simplified)
+        let typingTimeout;
+        messageInput.addEventListener('input', () => {
+            if(!currentChatId || !currentUser) return;
+            const typingRef = db.ref(`chats/${currentChatId}/typing/${currentUser.uid}`);
+            typingRef.set(true);
+            clearTimeout(typingTimeout);
+            typingTimeout = setTimeout(() => {
+                typingRef.set(false);
+            }, 2000); // User is "not typing" if no input for 2s
+        });
+        
+        function listenForTypingIndicator(chatId, partnerId){
+            // Listen to chats/{chatId}/typing/{partnerId}
+            // If true, show typing indicator with partner's name. If false, hide.
+            // Placeholder:
+            const typingIndicatorRef = db.ref(`chats/${chatId}/typing/${partnerId}`);
+            if (chatListeners[`typing_${partnerId}`]) chatListeners[`typing_${partnerId}`]();
+            const typingListener = typingIndicatorRef.on('value', snap => {
+                 const typingDiv = chatMessagesArea.querySelector(`.typing-indicator[data-user-id="${partnerId}"]`);
+                if(snap.val() === true) {
+                    if(!typingDiv) {
+                        const partner = usersCache[partnerId];
+                        const name = partner ? partner.displayName.split(' ')[0] : 'Someone'; // First name
+                        const indicator = document.createElement('div');
+                        indicator.classList.add('typing-indicator');
+                        indicator.dataset.userId = partnerId;
+                        indicator.innerHTML = `${name} is typing <span>.</span><span>.</span><span>.</span>`;
+                        chatMessagesArea.appendChild(indicator);
+                        scrollToBottom();
+                    }
+                } else {
+                    if(typingDiv) typingDiv.remove();
+                }
+            });
+            chatListeners[`typing_${partnerId}`] = () => typingIndicatorRef.off('value', typingListener);
+        }
+
+        sendMessageBtn.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+        
+        function sendMessage() {
+            const text = messageInput.value.trim();
+            if (!text || !currentChatId || !currentUser) return;
+
+            const messageData = {
+                senderId: currentUser.uid,
+                text: text,
+                timestamp: firebase.database.ServerValue.TIMESTAMP,
+                chatId: currentChatId, // Storing chatId with message helps some queries
+                // seenBy: { [currentUser.uid]: true } // Sender has "seen" it
+            };
+            
+            // Push message and get unique ID
+            const newMessageRef = db.ref(`chats/${currentChatId}/messages`).push();
+            messageData.id = newMessageRef.key; // Store the message ID within the message data
+            newMessageRef.set(messageData)
+                .then(() => {
+                    messageInput.value = '';
+                    messageInput.style.height = 'auto'; // Reset height for textarea
+                    // Update last message for both users in their userChats list
+                    const shortText = text.length > 30 ? text.substring(0, 27) + '...' : text;
+                    const lastMsgUpdate = { lastMessage: shortText, timestamp: firebase.database.ServerValue.TIMESTAMP };
+                     // Find partnerId for this chat to update their userChats too
+                     db.ref(`chats/${currentChatId}/members`).once('value', snapshot => {
+                         if(snapshot.exists()){
+                            snapshot.forEach(memberSnap => {
+                                const memberId = memberSnap.key;
+                                let partnerIdForThisMember;
+                                if(memberId === currentUser.uid){
+                                     partnerIdForThisMember = Object.keys(snapshot.val()).find(id => id !== currentUser.uid);
+                                } else {
+                                     partnerIdForThisMember = currentUser.uid;
+                                }
+                                 db.ref(`userChats/${memberId}/${currentChatId}`).update({ ...lastMsgUpdate, partnerId: partnerIdForThisMember });
+                            });
+                         }
+                     });
+                })
+                .catch(error => console.error("Error sending message:", error));
+        }
+
+        function scrollToBottom() {
+            chatMessagesArea.scrollTop = chatMessagesArea.scrollHeight;
+        }
+
+        // Auto-resize textarea
+        messageInput.addEventListener('input', () => {
+            messageInput.style.height = 'auto';
+            messageInput.style.height = (messageInput.scrollHeight) + 'px';
+        });
+
+        // --- Settings Modal ---
+        settingsBtn.addEventListener('click', () => {
+            settingsModal.classList.add('visible');
+        });
+        closeSettingsModalBtn.addEventListener('click', () => {
+             settingsModal.classList.remove('visible');
+        });
+        settingsModal.addEventListener('click', (e)=>{
+             if(e.target === settingsModal) settingsModal.classList.remove('visible');
+        });
+
+        // --- Mobile View Navigation (FEATURE 15) ---
+        function showChatListView() {
+            chatListView.style.display = 'flex'; // Use flex for column layout
+            chatView.style.display = 'none';
+            if (window.innerWidth <= 768) {
+                appWrapper.classList.remove('chat-active');
+            }
+        }
+        function showChatView() {
+            chatListView.style.display = 'none';
+            chatView.style.display = 'flex'; // Use flex
+             if (window.innerWidth <= 768) {
+                appWrapper.classList.add('chat-active');
+            }
+            scrollToBottom();
+            messageInput.focus();
+        }
+        backToChatsBtn.addEventListener('click', () => {
+             showChatListView();
+             // Detach current chat's listeners to save resources when not viewing
+            if (currentChatId && chatListeners[currentChatId]) chatListeners[currentChatId]();
+             const partnerId = chatPartnerInfo.dataset.partnerId; // Assuming you store partnerId on chatPartnerInfo
+             if(partnerId && chatListeners[`typing_${partnerId}`]) chatListeners[`typing_${partnerId}`]();
+             if(partnerId && chatListeners[`partnerStatus_${partnerId}`]) chatListeners[`partnerStatus_${partnerId}`]();
+            currentChatId = null;
+        });
+
+        // Adjust view based on window size initially and on resize
+        function handleResponsiveLayout(){
+             if(window.innerWidth > 768){
+                 chatListView.style.display = 'flex';
+                 chatView.style.display = 'flex'; // Both visible on desktop
+                 appWrapper.classList.remove('chat-active');
+             } else {
+                 if(currentChatId){ // If a chat is active, show chat view
+                      showChatView();
+                 } else { // Else show chat list
+                     showChatListView();
+                 }
+             }
+        }
+        window.addEventListener('resize', handleResponsiveLayout);
+        
+        // --- Init ---
+        // handleResponsiveLayout will be called after login determines initial state
+
+    </script>
+</body>
+</html>
